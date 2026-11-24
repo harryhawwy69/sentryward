@@ -7,6 +7,8 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { SeverityBadge } from "@/features/reviews/badges"
+import { TablePagination } from "@/components/TablePagination"
+import { paginate, usePagination } from "@/hooks/use-pagination"
 import { plural } from "@/lib/plural"
 import { cn } from "@/lib/utils"
 import { useFindingStats } from "./api"
@@ -22,6 +24,8 @@ type Hint = { text: string; to: string }
 
 interface Group<K> {
   label: string
+  // Prefix for this table's ?<prefix>Page= and ?<prefix>Size= params.
+  prefix: string
   rows: FalsePositiveRow<K>[]
   name: (key: K) => ReactNode
   hint: (key: K) => Hint | null
@@ -36,9 +40,11 @@ function hintLink(hint: Hint | null) {
   )
 }
 
-function GroupTable<K>({ label, rows, name, hint }: Group<K>) {
+function GroupTable<K>({ label, prefix, rows, name, hint }: Group<K>) {
   const shown = rows.filter((row) => row.found >= MIN_FOUND)
   const hidden = rows.length - shown.length
+  const pagination = usePagination(prefix)
+  const page = paginate(shown, pagination.page, pagination.size)
   return (
     <div className="flex flex-col gap-2">
       <Table aria-label={`False positives by ${label.toLowerCase()}`}>
@@ -51,7 +57,7 @@ function GroupTable<K>({ label, rows, name, hint }: Group<K>) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {shown.map((row) => (
+          {page.rows.map((row) => (
             <TableRow key={String(row.key)}>
               <TableCell>
                 <div className="flex flex-col items-start gap-0.5">
@@ -73,6 +79,15 @@ function GroupTable<K>({ label, rows, name, hint }: Group<K>) {
           )}
         </TableBody>
       </Table>
+      {shown.length > 0 && (
+        <TablePagination
+          page={page.page}
+          size={pagination.size}
+          total={page.total}
+          onPageChange={pagination.setPage}
+          onSizeChange={pagination.setSize}
+        />
+      )}
       {hidden > 0 && (
         <p className="text-xs text-muted-foreground">
           {hidden} {hidden === 1 ? "row" : "rows"} with fewer than {MIN_FOUND} findings hidden
@@ -154,12 +169,14 @@ export function FalsePositiveBreakdown({ repoId, repoName }: FalsePositiveBreakd
       <CardContent className={cn("grid gap-6", by.rule.length > 0 ? "lg:grid-cols-2" : "lg:grid-cols-3")}>
         <GroupTable
           label="Category"
+          prefix="fpCat"
           rows={by.category}
           name={categoryLabel}
           hint={(key) => categoryHint(key, repoId)}
         />
         <GroupTable
           label="Severity"
+          prefix="fpSev"
           rows={by.severity}
           name={(key) => <SeverityBadge severity={key} />}
           // Low-severity noise is what the confidence and severity floors are for;
@@ -172,6 +189,7 @@ export function FalsePositiveBreakdown({ repoId, repoName }: FalsePositiveBreakd
         />
         <GroupTable
           label="Model"
+          prefix="fpModel"
           rows={by.model}
           name={(key) => (key === null ? <span className="text-muted-foreground">Analyzer or unrecorded</span> : <code className="text-xs">{key}</code>)}
           hint={(key) => (key === null ? null : { text: "Try another model", to: configLink("llm", repoId) })}
@@ -179,6 +197,7 @@ export function FalsePositiveBreakdown({ repoId, repoName }: FalsePositiveBreakd
         {by.rule.length > 0 && (
           <GroupTable
             label="Rule"
+            prefix="fpRule"
             rows={by.rule}
             name={(key) => <code className="text-xs">{key}</code>}
             // Rules live in the repository's .sentryward.yaml, which no setting here can change.

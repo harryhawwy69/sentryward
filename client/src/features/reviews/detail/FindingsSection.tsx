@@ -24,10 +24,6 @@ import {
   type Severity,
 } from "../types"
 
-// Nitpicks and outside-diff comments start collapsed: they are the long tail
-// someone skims after the comments that need action.
-const OPEN_BY_DEFAULT = new Set<Bucket>(["actionable", "requirement_gap"])
-
 function groupByFile(findings: Finding[]) {
   const groups = new Map<string, Finding[]>()
   for (const finding of findings) {
@@ -91,12 +87,31 @@ function useFindingFilters() {
 
 // onOpenFile shows a file's diff; a finding's path links there when its file is
 // part of the change.
-export function FindingsSection({ result, onOpenFile }: { result: ReviewResult; onOpenFile?: (path: string) => void }) {
+export function FindingsSection({
+  result,
+  onOpenFile,
+  expanded,
+}: {
+  result: ReviewResult
+  onOpenFile?: (path: string) => void
+  // The Overview's global choice; changing it opens or closes every finding.
+  expanded: boolean
+}) {
   const filters = useFindingFilters()
+  // Starts from the saved global choice: collapsed unless everything was expanded last time.
   const [open, setOpen] = useState(
-    () => new Set(result.findings.filter((f) => OPEN_BY_DEFAULT.has(f.bucket)).map((f) => f.fingerprint)),
+    () => new Set(expanded ? result.findings.map((f) => f.fingerprint) : []),
   )
   const files = useMemo(() => new Map(result.files.map((file) => [file.path, file])), [result.files])
+
+  // The global toggle is the only thing that resets the whole set; the toolbar
+  // buttons below stay local to this view. Adjusted during render so the list
+  // never paints with the previous choice.
+  const [lastExpanded, setLastExpanded] = useState(expanded)
+  if (lastExpanded !== expanded) {
+    setLastExpanded(expanded)
+    setOpen(new Set(expanded ? result.findings.map((f) => f.fingerprint) : []))
+  }
 
   const counts = useMemo(() => countBySeverity(result.findings), [result.findings])
 

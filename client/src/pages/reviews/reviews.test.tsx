@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { toast } from "sonner"
@@ -7,6 +7,10 @@ import { jsonResponse, renderWithProviders } from "@/test/renderWithProviders"
 import { mockApi } from "@/test/apiRoutes"
 import { detail, listItem } from "@/test/fixtures"
 import { setViewportWidth } from "@/test/viewport"
+
+// Tests that read finding or walkthrough bodies open the Overview first; the
+// default-collapsed behaviour has its own describe below.
+const expandOverview = () => localStorage.setItem("sentryward.reviewOverviewExpanded", "true")
 
 describe("Reviews page", () => {
   it("lists reviews with their status, verdict and finding counts", async () => {
@@ -672,6 +676,7 @@ describe("Review detail page", () => {
   })
 
   it("groups findings by bucket and shows walkthrough, notes and coverage", async () => {
+    expandOverview()
     mockApi({ [`GET /api/reviews/${detail.id}`]: { review: detail } })
     renderWithProviders(<App />, { route: `/reviews/${detail.id}?view=overview` })
 
@@ -987,6 +992,7 @@ describe("Review detail page", () => {
   })
 
   it("labels confidence as self-reported and shows verification, impact and fix rationale", async () => {
+    expandOverview()
     const [first, ...rest] = detail.result!.findings
     const findings = [
       {
@@ -1010,6 +1016,7 @@ describe("Review detail page", () => {
   })
 
   it("names the rule of a rule finding, with no confidence for a pattern match", async () => {
+    expandOverview()
     const [first, ...rest] = detail.result!.findings
     const findings = [{ ...first!, source: "rule" as const, ruleId: "no-db-in-controllers", model: undefined }, ...rest]
     const review = { ...detail, result: { ...detail.result!, findings } }
@@ -1035,6 +1042,7 @@ describe("Review detail page", () => {
   })
 
   it("lists the risky areas a change touches or reaches", async () => {
+    expandOverview()
     const riskyAreas = [
       { kind: "auth" as const, path: "src/middleware/auth.ts", reason: "removes an authorization check", removesCheck: true },
       { kind: "api" as const, path: "src/routes/users.ts", reason: "calls run, 2 hops from the change", via: "main -> run" },
@@ -1068,6 +1076,7 @@ describe("Review detail page", () => {
   })
 
   it("lists failed inline comments and usage in the sidebar", async () => {
+    expandOverview()
     const publication = {
       inlinePosted: [],
       inlineSkipped: 0,
@@ -1237,6 +1246,7 @@ describe("Review detail page", () => {
   })
 
   it("copies an agent prompt for one finding", async () => {
+    expandOverview()
     mockApi({ [`GET /api/reviews/${detail.id}`]: { review: detail } })
     const user = userEvent.setup()
     const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue()
@@ -1868,5 +1878,34 @@ describe("Review detail page", () => {
     const alert = await screen.findByRole("alert")
     expect(within(alert).getByText("Cancelled")).toBeInTheDocument()
     expect(within(alert).getByText("Cancelled by Dev")).toBeInTheDocument()
+  })
+})
+
+describe("Reviews page overview collapse", () => {
+  afterEach(() => localStorage.removeItem("sentryward.reviewOverviewExpanded"))
+
+  it("starts collapsed, expands everything from one control and keeps the choice", async () => {
+    localStorage.removeItem("sentryward.reviewOverviewExpanded")
+    const walkthrough = { ...detail.result!.walkthrough!, highLevelSummary: "Adds b and c." }
+    mockApi({ [`GET /api/reviews/${detail.id}`]: { review: { ...detail, result: { ...detail.result!, walkthrough } } } })
+    const first = renderWithProviders(<App />, { route: `/reviews/${detail.id}?view=overview` })
+
+    const section = await screen.findByRole("button", { name: /High-level summary/ })
+    const finding = await screen.findByRole("button", { name: /SQL injection in search/ })
+    expect(section).toHaveAttribute("aria-expanded", "false")
+    expect(finding).toHaveAttribute("aria-expanded", "false")
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand everything" }))
+    expect(section).toHaveAttribute("aria-expanded", "true")
+    expect(finding).toHaveAttribute("aria-expanded", "true")
+    expect(localStorage.getItem("sentryward.reviewOverviewExpanded")).toBe("true")
+
+    // A reload starts from the saved choice.
+    first.unmount()
+    renderWithProviders(<App />, { route: `/reviews/${detail.id}?view=overview` })
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /High-level summary/ })).toHaveAttribute("aria-expanded", "true"),
+    )
+    expect(screen.getByRole("button", { name: "Collapse everything" })).toBeInTheDocument()
   })
 })

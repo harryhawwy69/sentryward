@@ -8,8 +8,6 @@ import { ForgeMarkdown } from "@/features/config/ForgeMarkdown"
 import { cn } from "@/lib/utils"
 import type { IssueAssessment, IssueRef, ReviewResult, RiskyArea } from "../types"
 
-// Short file lists are cheap to show; longer ones would push the findings off screen.
-const FILES_OPEN_MAX = 5
 const MAX_EFFORT = 5
 
 const ASSESSMENT_LABEL: Record<IssueAssessment, string> = {
@@ -62,20 +60,26 @@ function EffortMeter({ effort }: { effort: number }) {
   )
 }
 
-// Uncontrolled on purpose: the page keys the result view by review id, so a
-// re-run starts from these defaults again.
+// Follows the global Overview toggle, but a click on the section itself only
+// changes this view: the saved preference is untouched.
 function WalkthroughSection({
   title,
   count,
-  defaultOpen,
+  expanded,
   children,
 }: {
   title: string
   count?: number
-  defaultOpen: boolean
+  expanded: boolean
   children: ReactNode
 }) {
-  const [open, setOpen] = useState(defaultOpen)
+  const [open, setOpen] = useState(expanded)
+  // Adjust during render (not in an effect) when the global toggle changes.
+  const [lastExpanded, setLastExpanded] = useState(expanded)
+  if (lastExpanded !== expanded) {
+    setLastExpanded(expanded)
+    setOpen(expanded)
+  }
   return (
     <Collapsible asChild open={open} onOpenChange={setOpen}>
       <section aria-label={title} className="flex flex-col border-t pt-2">
@@ -99,10 +103,12 @@ export function WalkthroughCard({
   walkthrough,
   provider,
   files,
+  expanded,
 }: {
   walkthrough: NonNullable<ReviewResult["walkthrough"]>
   provider: ReviewResult["change"]["provider"]
   files: ReviewResult["files"]
+  expanded: boolean
 }) {
   const fileStats = useMemo(() => new Map(files.map((file) => [file.path, file])), [files])
   const { fileSummaries, labels, linkedIssues, relatedIssues, riskyAreas } = walkthrough
@@ -130,7 +136,7 @@ export function WalkthroughCard({
       <CardContent className="flex flex-col gap-2 text-sm">
         <p className="pb-2 leading-relaxed whitespace-pre-wrap">{walkthrough.overview}</p>
         {riskyAreas && riskyAreas.length > 0 && (
-          <WalkthroughSection title="Risky areas" count={riskyAreas.length} defaultOpen>
+          <WalkthroughSection title="Risky areas" count={riskyAreas.length} expanded={expanded}>
             <ul className="flex flex-col gap-2">
               {riskyAreas.map((area) => (
                 <li key={`${area.kind}:${area.path}`} className="flex flex-col gap-0.5">
@@ -155,7 +161,7 @@ export function WalkthroughCard({
           <WalkthroughSection
             title="Changed files"
             count={fileSummaries.length}
-            defaultOpen={fileSummaries.length <= FILES_OPEN_MAX}
+            expanded={expanded}
           >
             <ul className="divide-y rounded-md border">
               {fileSummaries.map((entry) => {
@@ -181,18 +187,17 @@ export function WalkthroughCard({
           </WalkthroughSection>
         )}
         {walkthrough.highLevelSummary && (
-          <WalkthroughSection title="High-level summary" defaultOpen>
+          <WalkthroughSection title="High-level summary" expanded={expanded}>
             <ForgeMarkdown provider={provider}>{walkthrough.highLevelSummary}</ForgeMarkdown>
           </WalkthroughSection>
         )}
         {walkthrough.sequenceDiagram && (
-          // Collapsed by default: diagrams are tall and secondary to the findings.
-          <WalkthroughSection title="Sequence diagram" defaultOpen={false}>
+          <WalkthroughSection title="Sequence diagram" expanded={expanded}>
             <MermaidDiagram source={walkthrough.sequenceDiagram} />
           </WalkthroughSection>
         )}
         {linkedIssues && linkedIssues.length > 0 && (
-          <WalkthroughSection title="Linked issues" count={linkedIssues.length} defaultOpen>
+          <WalkthroughSection title="Linked issues" count={linkedIssues.length} expanded={expanded}>
             <ul className="flex flex-col gap-2">
               {linkedIssues.map((issue) => (
                 <li key={issue.ref} className="flex flex-col gap-0.5">
@@ -207,7 +212,7 @@ export function WalkthroughCard({
           </WalkthroughSection>
         )}
         {relatedIssues && relatedIssues.length > 0 && (
-          <WalkthroughSection title="Possibly related issues" count={relatedIssues.length} defaultOpen={false}>
+          <WalkthroughSection title="Possibly related issues" count={relatedIssues.length} expanded={expanded}>
             <ul className="flex flex-col gap-1">
               {relatedIssues.map((issue) => (
                 <li key={issue.ref}>

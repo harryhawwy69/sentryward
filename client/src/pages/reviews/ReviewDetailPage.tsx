@@ -5,6 +5,8 @@ import {
   ArrowLeft,
   Bot,
   ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Copy,
   Download,
   ExternalLink,
@@ -37,6 +39,7 @@ import { FileDiff } from "@/features/reviews/detail/FileDiff"
 import { FileTree } from "@/features/reviews/detail/FileTree"
 import { buildFileTree, treeOrder } from "@/features/reviews/detail/fileTree"
 import { FindingsSection } from "@/features/reviews/detail/FindingsSection"
+import { useOverviewExpanded } from "@/features/reviews/detail/overviewExpanded"
 import { ReviewProblemActions } from "@/features/reviews/detail/ReviewProblem"
 import { ReviewProgress } from "@/features/reviews/detail/ReviewProgress"
 import { ReviewSidebar } from "@/features/reviews/detail/ReviewSidebar"
@@ -227,13 +230,28 @@ function ResultNotes({ result }: { result: ReviewResult }) {
 }
 
 function ResultOverview({ result, onOpenFile }: { result: ReviewResult; onOpenFile: (path: string) => void }) {
+  // One choice drives every walkthrough section and finding, and it outlives
+  // the review: the same control works the same way on the next one.
+  const [expanded, setExpanded] = useOverviewExpanded()
+
   return (
     <>
+      <div className="flex items-center justify-end">
+        <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)}>
+          {expanded ? <ChevronsDownUp /> : <ChevronsUpDown />}
+          {expanded ? "Collapse everything" : "Expand everything"}
+        </Button>
+      </div>
       <ResultNotes result={result} />
       {result.walkthrough && (
-        <WalkthroughCard walkthrough={result.walkthrough} provider={result.change.provider} files={result.files} />
+        <WalkthroughCard
+          walkthrough={result.walkthrough}
+          provider={result.change.provider}
+          files={result.files}
+          expanded={expanded}
+        />
       )}
-      <FindingsSection result={result} onOpenFile={onOpenFile} />
+      <FindingsSection result={result} onOpenFile={onOpenFile} expanded={expanded} />
     </>
   )
 }

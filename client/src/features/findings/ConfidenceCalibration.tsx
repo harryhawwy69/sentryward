@@ -1,10 +1,12 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AlertTriangle } from "lucide-react"
 import { Alert, AlertTitle } from "@/components/ui/alert"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { TablePagination } from "@/components/TablePagination"
+import { paginate, usePagination } from "@/hooks/use-pagination"
 import { plural } from "@/lib/plural"
 import { useFindingCalibration } from "./api"
 import { CATEGORY_LABEL } from "./options"
@@ -63,6 +65,12 @@ function BucketTable({ label, buckets }: { label: string; buckets: CalibrationBu
 export function ConfidenceCalibration({ repoId, repoName }: { repoId?: string; repoName?: string | null }) {
   const [groupBy, setGroupBy] = useState<CalibrationGroupBy>("none")
   const { data, isPending, isError } = useFindingCalibration(repoId, groupBy)
+  const pagination = usePagination("calib")
+  // A different grouping or repository is a different list: start it at page 1.
+  useEffect(() => {
+    pagination.setPage(1)
+  }, [groupBy, repoId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const page = paginate(data?.groups ?? [], pagination.page, pagination.size)
 
   return (
     <Card aria-label="Confidence calibration" role="region">
@@ -100,7 +108,7 @@ export function ConfidenceCalibration({ repoId, repoName }: { repoId?: string; r
         ) : data.groups.length === 0 ? (
           <p className="text-sm text-muted-foreground">No model findings with a reported confidence yet.</p>
         ) : (
-          data.groups.map((group) => {
+          page.rows.map((group) => {
             // The grouping the data was fetched with: while a new one loads, the previous table stays up.
             const name = groupName(data.groupBy, group.key)
             return (
@@ -110,6 +118,15 @@ export function ConfidenceCalibration({ repoId, repoName }: { repoId?: string; r
               </div>
             )
           })
+        )}
+        {(data?.groups.length ?? 0) > 1 && (
+          <TablePagination
+            page={page.page}
+            size={pagination.size}
+            total={page.total}
+            onPageChange={pagination.setPage}
+            onSizeChange={pagination.setSize}
+          />
         )}
       </CardContent>
     </Card>

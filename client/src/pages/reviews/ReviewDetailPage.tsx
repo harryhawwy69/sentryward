@@ -39,7 +39,7 @@ import { FileDiff } from "@/features/reviews/detail/FileDiff"
 import { FileTree } from "@/features/reviews/detail/FileTree"
 import { buildFileTree, treeOrder } from "@/features/reviews/detail/fileTree"
 import { FindingsSection } from "@/features/reviews/detail/FindingsSection"
-import { TREE_MAX_PX, TREE_MIN_PX, maxTreeWidth } from "@/features/reviews/detail/treeWidth"
+import { TREE_MIN_PX } from "@/features/reviews/detail/treeWidth"
 import { useTreeWidth } from "@/features/reviews/detail/useTreeWidth"
 import { ReviewProblemActions } from "@/features/reviews/detail/ReviewProblem"
 import { ReviewProgress } from "@/features/reviews/detail/ReviewProgress"
@@ -179,15 +179,18 @@ function ReviewView({
 
   return (
     <>
-      <aside className="relative hidden lg:sticky lg:top-18 lg:block lg:max-h-[calc(100svh-5.5rem)] lg:overflow-y-auto">
-        {treeContents()}
+      {/* The handle sits beside the scrolling aside, not inside it: a scroll
+          container clips overflow on both axes, which would hide a handle
+          hanging into the gap, and it would scroll away with a long tree. */}
+      <div className="relative hidden lg:sticky lg:top-18 lg:block">
+        <aside className="lg:max-h-[calc(100svh-5.5rem)] lg:overflow-y-auto">{treeContents()}</aside>
         <div
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize the file tree"
           aria-valuenow={Math.round(tree.width)}
           aria-valuemin={TREE_MIN_PX}
-          aria-valuemax={maxTreeWidth(typeof window === "undefined" ? TREE_MAX_PX : window.innerWidth)}
+          aria-valuemax={tree.max}
           tabIndex={0}
           onPointerDown={tree.startDrag}
           onKeyDown={tree.onKeyDown}
@@ -197,7 +200,7 @@ function ReviewView({
         >
           <span aria-hidden className="h-8 w-0.5 rounded bg-border transition-colors group-hover:bg-primary group-focus-visible:bg-primary" />
         </div>
-      </aside>
+      </div>
       <div className="flex min-w-0 flex-col gap-6">
         {/* Below lg the tree would push the diff out of sight, so it opens in a sheet. */}
         <Sheet open={filesOpen} onOpenChange={setFilesOpen}>
@@ -469,7 +472,7 @@ export function ReviewDetailPage() {
       {/* Tree, diff and sidebar side by side only where all three fit; below
           xl the sidebar moves under them. */}
       <div
-        className="grid items-start gap-6 lg:grid-cols-[var(--tree-w,15rem)_minmax(0,1fr)] xl:grid-cols-[var(--tree-w,16rem)_minmax(0,1fr)_20rem]"
+        className="grid items-start gap-6 lg:grid-cols-[var(--tree-w)_minmax(0,1fr)] xl:grid-cols-[var(--tree-w)_minmax(0,1fr)_20rem]"
         style={{ "--tree-w": `${treeWidth.width}px` } as CSSProperties}
       >
         {/* Keyed so a re-run clears local toggles and starts from the saved global choice. */}

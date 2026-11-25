@@ -1,4 +1,5 @@
 import { act, renderHook } from "@testing-library/react"
+import type { KeyboardEvent } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   TREE_DEFAULT_PX, TREE_MAX_PX, TREE_MIN_PX, TREE_STORAGE_KEY,
@@ -66,26 +67,54 @@ describe("persistence", () => {
 })
 
 describe("useTreeWidth", () => {
-  it("starts from the saved width and persists changes", () => {
+  const key = (k: string) => ({ key: k, preventDefault() {} }) as KeyboardEvent<HTMLElement>
+
+  it("starts from the saved width and persists only what the user chose", () => {
     saveTreeWidth(300)
     const { result } = renderHook(() => useTreeWidth())
 
     expect(result.current.width).toBe(300)
-    act(() => result.current.setWidth(360))
-    expect(JSON.parse(String(localStorage.getItem(TREE_STORAGE_KEY)))).toBe(360)
-
-    act(() => result.current.onKeyDown({ key: "ArrowLeft", preventDefault() {} } as React.KeyboardEvent<HTMLElement>))
-    expect(result.current.width).toBe(344)
+    act(() => result.current.onKeyDown(key("ArrowLeft")))
+    expect(result.current.width).toBe(284)
+    expect(localStorage.getItem(TREE_STORAGE_KEY)).toBe("284")
 
     act(() => result.current.reset())
     expect(result.current.width).toBe(TREE_DEFAULT_PX)
+    expect(localStorage.getItem(TREE_STORAGE_KEY)).toBe(String(TREE_DEFAULT_PX))
+  })
+
+  it("writes nothing just by mounting", () => {
+    const { result } = renderHook(() => useTreeWidth())
+    expect(result.current.width).toBe(TREE_DEFAULT_PX)
+    expect(localStorage.getItem(TREE_STORAGE_KEY)).toBeNull()
   })
 
   it("handles Home and End", () => {
     const { result } = renderHook(() => useTreeWidth())
-    act(() => result.current.onKeyDown({ key: "End", preventDefault() {} } as React.KeyboardEvent<HTMLElement>))
+    act(() => result.current.onKeyDown(key("End")))
     expect(result.current.width).toBe(maxTreeWidth(window.innerWidth))
-    act(() => result.current.onKeyDown({ key: "Home", preventDefault() {} } as React.KeyboardEvent<HTMLElement>))
+    act(() => result.current.onKeyDown(key("Home")))
     expect(result.current.width).toBe(TREE_MIN_PX)
+  })
+
+  it("clamps to a narrower window without overwriting the saved preference", () => {
+    const original = window.innerWidth
+    try {
+      saveTreeWidth(480)
+      window.innerWidth = 1600
+      const { result } = renderHook(() => useTreeWidth())
+      expect(result.current.width).toBe(480)
+      expect(result.current.max).toBe(TREE_MAX_PX)
+
+      act(() => {
+        window.innerWidth = 800
+        window.dispatchEvent(new Event("resize"))
+      })
+      expect(result.current.width).toBe(320)
+      expect(result.current.max).toBe(320)
+      expect(localStorage.getItem(TREE_STORAGE_KEY)).toBe("480")
+    } finally {
+      window.innerWidth = original
+    }
   })
 })

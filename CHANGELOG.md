@@ -10,6 +10,11 @@ While Sentryward is pre-1.0, minor versions may include breaking changes.
 
 ### Added
 
+- Global Expand all / Collapse all controls on the review Overview. Walkthrough
+  sections and findings start collapsed, and the last global choice is remembered
+  across reviews and reloads. Individual toggles and the findings toolbar remain
+  local to the current view (#302).
+
 - Custom reviewers (`reviewers`). A team defines extra reviewers with a name,
   instructions, optional file globs (`paths`), severity floor and finding limit
   (`max_findings`), in the global, repository or folder settings (new editor on

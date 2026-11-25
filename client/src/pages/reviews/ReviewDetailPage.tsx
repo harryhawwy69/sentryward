@@ -5,6 +5,8 @@ import {
   ArrowLeft,
   Bot,
   ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Copy,
   Download,
   ExternalLink,
@@ -41,6 +43,7 @@ import { ReviewProblemActions } from "@/features/reviews/detail/ReviewProblem"
 import { ReviewProgress } from "@/features/reviews/detail/ReviewProgress"
 import { ReviewSidebar } from "@/features/reviews/detail/ReviewSidebar"
 import { WalkthroughCard } from "@/features/reviews/detail/WalkthroughCard"
+import { useOverviewExpansion } from "@/features/reviews/detail/useOverviewExpansion"
 import { PROVIDERS } from "@/features/forge/providers"
 import { changeLabel } from "@/features/reviews/links"
 import { copyToClipboard } from "@/lib/clipboard"
@@ -227,13 +230,29 @@ function ResultNotes({ result }: { result: ReviewResult }) {
 }
 
 function ResultOverview({ result, onOpenFile }: { result: ReviewResult; onOpenFile: (path: string) => void }) {
+  const { expansion, setAll } = useOverviewExpansion()
   return (
     <>
+      <div role="toolbar" aria-label="Overview sections" className="flex flex-wrap items-center justify-end gap-1">
+        <Button variant="ghost" size="sm" onClick={() => setAll(true)}>
+          <ChevronsUpDown />
+          Expand all
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setAll(false)}>
+          <ChevronsDownUp />
+          Collapse all
+        </Button>
+      </div>
       <ResultNotes result={result} />
       {result.walkthrough && (
-        <WalkthroughCard walkthrough={result.walkthrough} provider={result.change.provider} files={result.files} />
+        <WalkthroughCard
+          walkthrough={result.walkthrough}
+          provider={result.change.provider}
+          files={result.files}
+          expansion={expansion}
+        />
       )}
-      <FindingsSection result={result} onOpenFile={onOpenFile} />
+      <FindingsSection result={result} onOpenFile={onOpenFile} expansion={expansion} />
     </>
   )
 }
@@ -427,7 +446,7 @@ export function ReviewDetailPage() {
       {/* Tree, diff and sidebar side by side only where all three fit; below
           xl the sidebar moves under them. */}
       <div className="grid items-start gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)_20rem]">
-        {/* Keyed so a re-run navigating here starts with fresh collapse state. */}
+        {/* Keyed so a re-run clears local toggles and starts from the saved global choice. */}
         <ReviewView key={review.id} review={review} result={result} overview={overview} banner={banner} />
         <div className="lg:col-span-2 xl:col-span-1">
           <ReviewSidebar review={review} result={result} />

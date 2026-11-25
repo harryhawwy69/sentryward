@@ -38,8 +38,10 @@ type RepoOption = { value: string; label: string }
 // Filters, search, sort and paging for one findings list, kept in the URL so
 // they survive opening a finding's review and coming Back. The page holds one
 // per tab, the second under its own param prefix (?fpState=), so each tab
-// keeps its own.
-export function useFindingFilters(repoOptions: RepoOption[], prefix?: string) {
+// keeps its own. `repoScoped` lists the pagination prefixes of other tables the
+// repository filter also scopes (the confidence calibration), so picking or
+// clearing a repository starts them over at page 1 too.
+export function useFindingFilters(repoOptions: RepoOption[], prefix?: string, repoScoped: string[] = []) {
   const pagination = usePagination(prefix)
   const { values: raw, set } = useUrlFilters(DEFAULTS, { prefix, allowed: ALLOWED })
   const { state, lifecycle, severity, category, kind, repo } = raw
@@ -75,7 +77,7 @@ export function useFindingFilters(repoOptions: RepoOption[], prefix?: string) {
   }
 
   function clearFilters() {
-    set({ state: ALL, lifecycle: ALL, severity: ALL, category: ALL, kind: ALL, repo: ALL })
+    set({ state: ALL, lifecycle: ALL, severity: ALL, category: ALL, kind: ALL, repo: ALL }, repoScoped)
   }
 
   // Each setter starts over at the first page (useUrlFilters does that).
@@ -85,7 +87,7 @@ export function useFindingFilters(repoOptions: RepoOption[], prefix?: string) {
     setSeverity: (value: string) => set({ severity: value }),
     setCategory: (value: string) => set({ category: value }),
     setKind: (value: string) => set({ kind: value }),
-    setRepo: (value: string) => set({ repo: value }),
+    setRepo: (value: string) => set({ repo: value }, repoScoped),
     setQuery: (value: string) => set({ q: value }),
   }
 

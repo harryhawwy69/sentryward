@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { AlertTriangle } from "lucide-react"
 import { Alert, AlertTitle } from "@/components/ui/alert"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,6 +15,9 @@ import type { CalibrationBucket, CalibrationGroupBy, FindingCategory } from "./t
 // Rows with fewer decided findings (fixed or dismissed as false positives, not
 // everything found) are muted: a rate over so few is mostly noise.
 const MIN_DECIDED = 5
+
+// Its own page params (?calibPage=): `fp` is the false-positive list on the same tab.
+export const CALIB_PAGINATION = "calib"
 
 const GROUP_LABEL: Record<CalibrationGroupBy, string> = {
   none: "All findings",
@@ -65,11 +68,9 @@ function BucketTable({ label, buckets }: { label: string; buckets: CalibrationBu
 export function ConfidenceCalibration({ repoId, repoName }: { repoId?: string; repoName?: string | null }) {
   const [groupBy, setGroupBy] = useState<CalibrationGroupBy>("none")
   const { data, isPending, isError } = useFindingCalibration(repoId, groupBy)
-  const pagination = usePagination("calib")
-  // A different grouping or repository is a different list: start it at page 1.
-  useEffect(() => {
-    pagination.setPage(1)
-  }, [groupBy, repoId]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A repository change starts this over at page 1 from FindingsPage (repoScoped),
+  // in the same URL update as the filter itself.
+  const pagination = usePagination(CALIB_PAGINATION)
   const page = paginate(data?.groups ?? [], pagination.page, pagination.size)
 
   return (
@@ -83,7 +84,14 @@ export function ConfidenceCalibration({ repoId, repoName }: { repoId?: string; r
           that were not re-reported or dismissed as false positives; muted rows have fewer than {MIN_DECIDED} of those.
         </CardDescription>
         <CardAction>
-          <Select value={groupBy} onValueChange={(value) => setGroupBy(value as CalibrationGroupBy)}>
+          <Select
+            value={groupBy}
+            onValueChange={(value) => {
+              // Another grouping is a different list: start it at page 1.
+              setGroupBy(value as CalibrationGroupBy)
+              pagination.setPage(1)
+            }}
+          >
             <SelectTrigger size="sm" aria-label="Group calibration">
               <SelectValue />
             </SelectTrigger>
@@ -108,25 +116,30 @@ export function ConfidenceCalibration({ repoId, repoName }: { repoId?: string; r
         ) : data.groups.length === 0 ? (
           <p className="text-sm text-muted-foreground">No model findings with a reported confidence yet.</p>
         ) : (
-          page.rows.map((group) => {
-            // The grouping the data was fetched with: while a new one loads, the previous table stays up.
-            const name = groupName(data.groupBy, group.key)
-            return (
-              <div key={String(group.key)} className="flex flex-col gap-2">
-                {name && <h3 className="text-sm font-medium">{name}</h3>}
-                <BucketTable label={name ? `Calibration for ${name}` : "Calibration"} buckets={group.buckets} />
-              </div>
-            )
-          })
-        )}
-        {(data?.groups.length ?? 0) > 1 && (
-          <TablePagination
-            page={page.page}
-            size={pagination.size}
-            total={page.total}
-            onPageChange={pagination.setPage}
-            onSizeChange={pagination.setSize}
-          />
+          <>
+            {/* A page holds whole groups, so a group's buckets never span two pages. */}
+            {page.rows.map((group) => {
+              // The grouping the data was fetched with: while a new one loads, the previous table stays up.
+              const name = groupName(data.groupBy, group.key)
+              return (
+                <div key={String(group.key)} className="flex flex-col gap-2">
+                  {name && <h3 className="text-sm font-medium">{name}</h3>}
+                  <BucketTable label={name ? `Calibration for ${name}` : "Calibration"} buckets={group.buckets} />
+                </div>
+              )
+            })}
+            {/* Inside this branch, not after the ternary: a failed refetch keeps the
+                old data, and the error alert must not get a pager under it. */}
+            {data.groups.length > 1 && (
+              <TablePagination
+                page={page.page}
+                size={pagination.size}
+                total={page.total}
+                onPageChange={pagination.setPage}
+                onSizeChange={pagination.setSize}
+              />
+            )}
+          </>
         )}
       </CardContent>
     </Card>

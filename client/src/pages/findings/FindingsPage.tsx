@@ -8,7 +8,7 @@ import { useRepos } from "@/features/forge/api"
 import type { FindingQuery } from "@/features/findings/api"
 import { FindingDetailsSheet } from "@/features/findings/FindingDetailsSheet"
 import { CALIB_PAGINATION, ConfidenceCalibration } from "@/features/findings/ConfidenceCalibration"
-import { FalsePositiveBreakdown } from "@/features/findings/FalsePositiveBreakdown"
+import { FalsePositiveBreakdown, MODEL_PAGINATION, RULE_PAGINATION } from "@/features/findings/FalsePositiveBreakdown"
 import { FindingList } from "@/features/findings/FindingList"
 import { FindingStatsStrip } from "@/features/findings/FindingStatsStrip"
 import { useFindingFilters } from "@/features/findings/useFindingFilters"
@@ -18,8 +18,9 @@ type Tab = "findings" | "false-positives"
 const TABS: readonly string[] = ["findings", "false-positives"] satisfies Tab[]
 
 const FALSE_POSITIVES: Partial<FindingQuery> = { state: "ignored", ignoreReason: "false_positive" }
-// The paginated tables the false-positive tab's repository filter also scopes.
-const REPO_SCOPED_PAGINATION = [CALIB_PAGINATION]
+// The paginated tables the false-positive tab's repository filter also scopes:
+// the breakdown's Model and Rule tables and the confidence calibration.
+const REPO_SCOPED_PAGINATION = [MODEL_PAGINATION, RULE_PAGINATION, CALIB_PAGINATION]
 
 export function FindingsPage() {
   // ?tab= keeps the open tab linkable, e.g. /findings?tab=false-positives.
@@ -39,7 +40,7 @@ export function FindingsPage() {
 
   const findings = useFindingFilters(repoOptions)
   // Its own paging params, so a page on one tab never carries over to the other.
-  // Its repository filter scopes the calibration too, so it resets that table's pages.
+  // Its repository filter scopes the breakdown and calibration too, so it resets those tables' pages.
   const falsePositives = useFindingFilters(repoOptions, "fp", REPO_SCOPED_PAGINATION)
 
   return (

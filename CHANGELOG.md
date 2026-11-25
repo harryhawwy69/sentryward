@@ -595,6 +595,13 @@ While Sentryward is pre-1.0, minor versions may include breaking changes.
   here · Findings land inline · status" line are gone. The badge is the new
   `client/public/sentryward-reviewing.svg`; `sentryward-progress.svg` stays
   for comments already posted.
+- The Model and Rule tables in the false-positive breakdown on the Findings
+  page are paginated (#303), each with its own page and page size in the URL
+  (`?fpModelPage=`, `?fpRulePage=`), apart from the false-positive list's.
+  Pages hold only the rows with enough findings to show; the "rows with fewer
+  than 5 findings hidden" note still counts the whole set. Picking or clearing
+  a repository starts both tables over at page 1. Category and Severity stay
+  unpaginated, since they always fit the smallest page.
 - The Models, Best model and Repositories tables on the Benchmarks page are
   paginated (#276), each with its own page and page size in the URL
   (`?modelsPage=`, `?bestPage=`, `?reposPage=`). Best model pages by model

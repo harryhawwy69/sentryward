@@ -39,8 +39,9 @@ type RepoOption = { value: string; label: string }
 // they survive opening a finding's review and coming Back. The page holds one
 // per tab, the second under its own param prefix (?fpState=), so each tab
 // keeps its own. `repoScoped` lists the pagination prefixes of other tables the
-// repository filter also scopes (the confidence calibration), so picking or
-// clearing a repository starts them over at page 1 too.
+// repository filter also scopes (the false-positive breakdown and confidence
+// calibration), so picking or clearing a repository starts them over at page 1
+// too.
 export function useFindingFilters(repoOptions: RepoOption[], prefix?: string, repoScoped: string[] = []) {
   const pagination = usePagination(prefix)
   const { values: raw, set } = useUrlFilters(DEFAULTS, { prefix, allowed: ALLOWED })

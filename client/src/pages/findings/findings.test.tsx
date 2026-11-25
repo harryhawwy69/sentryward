@@ -257,6 +257,94 @@ describe("Findings page", () => {
     expect(screen.queryByRole("button", { name: /Remove Repository filter/i })).toBeNull()
   })
 
+  // A breakdown table and the pagination controls under it (siblings of the table's container).
+  const breakdownGroup = (label: string) =>
+    screen.getByRole("table", { name: `False positives by ${label}` }).closest('[data-slot="table-container"]')!
+      .parentElement!
+  const modelRows = (count: number, prefix = "model") =>
+    Array.from({ length: count }, (_, i) => ({ key: `${prefix}-${i + 1}`, found: 10, falsePositives: 1, rate: 10 }))
+
+  it("pages the model and rule tables independently, counting every thin row as hidden", async () => {
+    mockApi({
+      "GET /api/findings/stats": {
+        ...stats,
+        falsePositivesBy: {
+          ...stats.falsePositivesBy,
+          // 12 shown models plus one under MIN_FOUND, on no page but in the note.
+          model: [...modelRows(12), { key: "thin-model", found: 2, falsePositives: 1, rate: 50 }],
+          rule: modelRows(12, "rule"),
+        },
+      },
+      [`${FP}&page=1&limit=10`]: page([falsePositive]),
+    })
+    renderWithProviders(<App />, { route: "/findings?tab=false-positives&fpModelPage=2" })
+    await screen.findByRole("table", { name: "False positives by model" })
+
+    const models = breakdownGroup("model")
+    expect(within(models).getByText("Showing 11-12 of 12")).toBeInTheDocument()
+    expect(within(models).getByText("model-11")).toBeInTheDocument()
+    expect(within(models).queryByText("model-1")).toBeNull()
+    expect(within(models).getByText("1 row with fewer than 5 findings hidden")).toBeInTheDocument()
+
+    // The rule table keeps its own page.
+    const rules = breakdownGroup("rule")
+    expect(within(rules).getByText("Showing 1-10 of 12")).toBeInTheDocument()
+    await userEvent.click(within(rules).getByRole("button", { name: "Next page" }))
+    expect(await within(rules).findByText("Showing 11-12 of 12")).toBeInTheDocument()
+    expect(within(models).getByText("Showing 11-12 of 12")).toBeInTheDocument()
+    // And so does the false-positive list above them.
+    expect(screen.getByText("Showing 1-1 of 1")).toBeInTheDocument()
+
+    // Category and severity always fit one page, so they get no controls.
+    expect(within(breakdownGroup("category")).queryByRole("button", { name: "Next page" })).toBeNull()
+    expect(within(breakdownGroup("severity")).queryByRole("button", { name: "Next page" })).toBeNull()
+  })
+
+  it("shows no page controls under a table without enough findings", async () => {
+    mockApi({
+      "GET /api/findings/stats": {
+        ...stats,
+        falsePositivesBy: { ...stats.falsePositivesBy, model: [{ key: "thin-model", found: 2, falsePositives: 1, rate: 50 }] },
+      },
+      [`${FP}&page=1&limit=10`]: page([]),
+    })
+    renderWithProviders(<App />, { route: "/findings?tab=false-positives" })
+    await screen.findByRole("table", { name: "False positives by model" })
+
+    const models = breakdownGroup("model")
+    expect(within(models).getByText("Not enough findings yet")).toBeInTheDocument()
+    expect(within(models).queryByRole("button", { name: "Next page" })).toBeNull()
+  })
+
+  it("starts the breakdown tables over at page 1 when the repository changes", async () => {
+    const repo = (id: string, fullPath: string) => ({ id, fullPath, provider: "gitlab", host: "gitlab.com", enabled: true })
+    const withModels = (prefix: string): FindingStats => ({
+      ...stats,
+      falsePositivesBy: { ...stats.falsePositivesBy, model: modelRows(12, prefix), rule: modelRows(12, `${prefix}-rule`) },
+    })
+    mockApi({
+      "GET /api/repos": { repos: [repo("r1", "team/web"), repo("r2", "team/api")] },
+      "GET /api/findings/stats": withModels("all"),
+      "GET /api/findings/stats?repoId=r2": withModels("api"),
+      [`${FP}&page=1&limit=10`]: page([falsePositive]),
+      [`GET /api/findings?repoId=r2&state=ignored&ignoreReason=false_positive&page=1&limit=10`]: page([]),
+    })
+    renderWithProviders(<App />, { route: "/findings?tab=false-positives&fpModelPage=2&fpRulePage=2" })
+    await screen.findByRole("table", { name: "False positives by model" })
+    expect(within(breakdownGroup("model")).getByText("Showing 11-12 of 12")).toBeInTheDocument()
+    expect(within(breakdownGroup("rule")).getByText("Showing 11-12 of 12")).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }))
+    await userEvent.click(await screen.findByRole("combobox", { name: "Repository" }))
+    await userEvent.click(screen.getByRole("option", { name: "team/api" }))
+
+    const region = await screen.findByRole("region", { name: "False positive breakdown" })
+    await within(region).findByText(/in team\/api/)
+    expect(within(breakdownGroup("model")).getByText("Showing 1-10 of 12")).toBeInTheDocument()
+    expect(within(breakdownGroup("model")).getByText("api-1")).toBeInTheDocument()
+    expect(within(breakdownGroup("rule")).getByText("Showing 1-10 of 12")).toBeInTheDocument()
+  })
+
   it("keeps the breakdown and the findings list on separate tabs", async () => {
     mockApi({
       "GET /api/findings/stats": stats,

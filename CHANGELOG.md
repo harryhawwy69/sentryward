@@ -612,6 +612,13 @@ While Sentryward is pre-1.0, minor versions may include breaking changes.
   until the new ones load, and switching between languages and categories
   does the same for Best model. The controls only show under a table with
   more than ten rows.
+- The Confidence calibration card on the Findings page's False positives tab
+  paginates its groups when grouped by model or category (#304), with its own
+  page and page size in the URL (`?calibPage=`, `?calibSize=`), apart from the
+  false-positive list's. A page holds whole groups, so a group's heading and
+  table never split across pages. Changing the grouping or picking or clearing
+  a repository starts it over at page 1. No grouping keeps its single table
+  without controls, and the loading, error and empty states show none either.
 - Slack notifications for a review are richer (#254): an emoji per event in
   the headline ("🔴 Review blocked · acme/api #42"), the findings broken down
   by severity in `critical`/`major`/`minor`/`info` order, a failed review's

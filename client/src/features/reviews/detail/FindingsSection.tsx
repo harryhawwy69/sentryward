@@ -14,6 +14,7 @@ import { FindingCard } from "../FindingCard"
 import { SeverityJump } from "./SeverityJump"
 import { ShortcutsDialog } from "./ShortcutsDialog"
 import { useFindingShortcuts } from "./useFindingShortcuts"
+import type { OverviewExpansion } from "./useOverviewExpansion"
 import {
   BUCKET_ORDER,
   BUCKET_TITLE,
@@ -23,10 +24,6 @@ import {
   type ReviewResult,
   type Severity,
 } from "../types"
-
-// Nitpicks and outside-diff comments start collapsed: they are the long tail
-// someone skims after the comments that need action.
-const OPEN_BY_DEFAULT = new Set<Bucket>(["actionable", "requirement_gap"])
 
 function groupByFile(findings: Finding[]) {
   const groups = new Map<string, Finding[]>()
@@ -91,11 +88,16 @@ function useFindingFilters() {
 
 // onOpenFile shows a file's diff; a finding's path links there when its file is
 // part of the change.
-export function FindingsSection({ result, onOpenFile }: { result: ReviewResult; onOpenFile?: (path: string) => void }) {
+export function FindingsSection({
+  result,
+  onOpenFile,
+  expansion,
+}: {
+  result: ReviewResult
+  onOpenFile?: (path: string) => void
+  expansion: OverviewExpansion
+}) {
   const filters = useFindingFilters()
-  const [open, setOpen] = useState(
-    () => new Set(result.findings.filter((f) => OPEN_BY_DEFAULT.has(f.bucket)).map((f) => f.fingerprint)),
-  )
   const files = useMemo(() => new Map(result.files.map((file) => [file.path, file])), [result.files])
 
   const counts = useMemo(() => countBySeverity(result.findings), [result.findings])
@@ -174,7 +176,7 @@ export function FindingsSection({ result, onOpenFile }: { result: ReviewResult; 
     toggle: () => {
       const finding = focusedFinding()
       if (!finding) return false
-      toggle(finding.fingerprint, !open.has(finding.fingerprint))
+      toggle(finding.fingerprint, !expansion.isExpanded(`finding:${finding.fingerprint}`))
       return true
     },
     copy: () => {
@@ -191,23 +193,14 @@ export function FindingsSection({ result, onOpenFile }: { result: ReviewResult; 
   })
 
   function setAll(expanded: boolean) {
-    setOpen((prev) => {
-      const next = new Set(prev)
-      for (const finding of visible) {
-        if (expanded) next.add(finding.fingerprint)
-        else next.delete(finding.fingerprint)
-      }
-      return next
-    })
+    expansion.setExpanded(
+      visible.map((finding) => `finding:${finding.fingerprint}`),
+      expanded,
+    )
   }
 
   function toggle(fingerprint: string, expanded: boolean) {
-    setOpen((prev) => {
-      const next = new Set(prev)
-      if (expanded) next.add(fingerprint)
-      else next.delete(fingerprint)
-      return next
-    })
+    expansion.setExpanded([`finding:${fingerprint}`], expanded)
   }
 
   // An empty list from a partial or failed run only means nothing was reported,
@@ -337,7 +330,7 @@ export function FindingsSection({ result, onOpenFile }: { result: ReviewResult; 
                         key={finding.fingerprint}
                         finding={finding}
                         change={result.change}
-                        open={open.has(finding.fingerprint)}
+                        open={expansion.isExpanded(`finding:${finding.fingerprint}`)}
                         onOpenChange={(expanded) => toggle(finding.fingerprint, expanded)}
                         onFocus={() => setCurrent(finding.fingerprint)}
                       />

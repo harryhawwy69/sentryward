@@ -12,7 +12,8 @@ function paramName(key: string, prefix?: string) {
 // the URL, and a value outside `allowed` (a stale or hand-edited link) reads
 // as the default. Every change starts over at page 1 in the same update: two
 // setSearchParams calls in one tick would each start from the same params and
-// the second would undo the first.
+// the second would undo the first. `resetAlso` names other tables' pagination
+// prefixes the change also scopes, so they start over in that same update.
 export function useUrlFilters<K extends string>(
   defaults: Record<K, string>,
   options: { prefix?: string; allowed?: Partial<Record<K, readonly string[]>> } = {},
@@ -27,7 +28,7 @@ export function useUrlFilters<K extends string>(
     values[key] = raw === null || (allowed && !allowed.includes(raw)) ? defaults[key] : raw
   }
 
-  function set(next: Partial<Record<K, string>>) {
+  function set(next: Partial<Record<K, string>>, resetAlso: string[] = []) {
     setParams(
       (current) => {
         const updated = new URLSearchParams(current)
@@ -36,7 +37,7 @@ export function useUrlFilters<K extends string>(
           if (value === defaults[key]) updated.delete(paramName(key, options.prefix))
           else updated.set(paramName(key, options.prefix), value)
         }
-        resetPages(updated, [options.prefix])
+        resetPages(updated, [options.prefix, ...resetAlso])
         return updated
       },
       { replace: true },

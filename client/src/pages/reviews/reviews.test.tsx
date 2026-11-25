@@ -677,6 +677,7 @@ describe("Review detail page", () => {
 
     const actionable = await screen.findByRole("region", { name: "Actionable comments" })
     expect(within(actionable).getByText("SQL injection in search")).toBeInTheDocument()
+    await userEvent.click(within(actionable).getByRole("button", { name: /SQL injection in search/ }))
     expect(within(actionable).getByText("db.query(sql, [q])")).toBeInTheDocument()
     expect(within(screen.getByRole("region", { name: "Nitpick comments" })).getByText("Rename c")).toBeInTheDocument()
     expect(
@@ -1002,6 +1003,7 @@ describe("Review detail page", () => {
     renderWithProviders(<App />, { route: `/reviews/${detail.id}?view=overview` })
 
     const actionable = await screen.findByRole("region", { name: "Actionable comments" })
+    await userEvent.click(within(actionable).getByRole("button", { name: /SQL injection in search/ }))
     expect(within(actionable).getByText(/Self-reported confidence 90%/)).toBeInTheDocument()
     expect(within(actionable).queryByText(/^Confidence/)).toBeNull()
     expect(within(actionable).getByText("Verified")).toBeInTheDocument()
@@ -1017,6 +1019,7 @@ describe("Review detail page", () => {
     renderWithProviders(<App />, { route: `/reviews/${detail.id}?view=overview` })
 
     const actionable = await screen.findByRole("region", { name: "Actionable comments" })
+    await userEvent.click(within(actionable).getByRole("button", { name: /SQL injection in search/ }))
     expect(within(actionable).getByText("Rule no-db-in-controllers")).toBeInTheDocument()
     expect(within(actionable).queryByText(/Self-reported confidence/)).toBeNull()
   })
@@ -1044,6 +1047,7 @@ describe("Review detail page", () => {
     renderWithProviders(<App />, { route: `/reviews/${detail.id}?view=overview` })
 
     const section = await screen.findByRole("region", { name: "Risky areas" })
+    await userEvent.click(within(section).getByRole("button", { name: /Risky areas/ }))
     expect(within(section).getByText("Authorization")).toBeInTheDocument()
     expect(within(section).getByText("removes an authorization check")).toBeInTheDocument()
     expect(within(section).getByText("src/routes/users.ts")).toBeInTheDocument()
@@ -1147,7 +1151,7 @@ describe("Review detail page", () => {
     await userEvent.click(trigger)
     expect(trigger).toHaveAttribute("aria-expanded", "true")
 
-    await userEvent.click(screen.getByRole("button", { name: "Collapse all" }))
+    await userEvent.click(within(screen.getByRole("toolbar", { name: "Filter findings" })).getByRole("button", { name: "Collapse all" }))
     expect(trigger).toHaveAttribute("aria-expanded", "false")
     expect(
       within(screen.getByRole("region", { name: "Actionable comments" })).getByRole("button", { name: /SQL injection/ }),
@@ -1243,6 +1247,7 @@ describe("Review detail page", () => {
     renderWithProviders(<App />, { route: `/reviews/${detail.id}?view=overview` })
 
     const actionable = await screen.findByRole("region", { name: "Actionable comments" })
+    await user.click(within(actionable).getByRole("button", { name: /SQL injection in search/ }))
     await user.click(within(actionable).getByRole("button", { name: "Copy agent prompt" }))
 
     expect(writeText).toHaveBeenCalledWith(

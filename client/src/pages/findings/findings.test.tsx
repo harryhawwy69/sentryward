@@ -70,6 +70,32 @@ const falsePositive: FindingRow = {
 }
 const FP = "GET /api/findings?state=ignored&ignoreReason=false_positive"
 
+const bucket = (min: number, found: number, confirmed: number, falsePositives: number) => {
+  const decided = confirmed + falsePositives
+  const pct = (n: number) => (decided ? Math.round((n / decided) * 100) : null)
+  return { min, max: min + 0.1, found, confirmed, falsePositives, decided, confirmedRate: pct(confirmed), falsePositiveRate: pct(falsePositives) }
+}
+const calibration = (groupBy: FindingCalibration["groupBy"], groups: FindingCalibration["groups"]): FindingCalibration => ({
+  days: 30,
+  groupBy,
+  selfReported: true,
+  note: "",
+  groups,
+})
+// `count` groups named `${name}-1`.., two buckets each, so a split group would show.
+const calibrationGroups = (name: string, count: number): FindingCalibration["groups"] =>
+  Array.from({ length: count }, (_, i) => ({
+    key: `${name}-${i + 1}`,
+    found: 14,
+    buckets: [bucket(0.6, 4, 1, 1), bucket(0.9, 10, 6, 2)],
+  }))
+const ungrouped = calibration("none", [{ key: null, found: 14, buckets: [bucket(0.6, 4, 1, 1), bucket(0.9, 10, 6, 2)] }])
+
+async function groupCalibration(card: HTMLElement, option: string) {
+  await userEvent.click(within(card).getByRole("combobox", { name: "Group calibration" }))
+  await userEvent.click(await screen.findByRole("option", { name: option }))
+}
+
 describe("Findings page", () => {
   it("shows the stat cards and findings with every column", async () => {
     mockApi({
@@ -167,18 +193,6 @@ describe("Findings page", () => {
   })
 
   it("shows how self-reported confidence matched outcomes, overall and by model", async () => {
-    const bucket = (min: number, found: number, confirmed: number, falsePositives: number) => {
-      const decided = confirmed + falsePositives
-      const pct = (n: number) => (decided ? Math.round((n / decided) * 100) : null)
-      return { min, max: min + 0.1, found, confirmed, falsePositives, decided, confirmedRate: pct(confirmed), falsePositiveRate: pct(falsePositives) }
-    }
-    const calibration = (groupBy: FindingCalibration["groupBy"], groups: FindingCalibration["groups"]): FindingCalibration => ({
-      days: 30,
-      groupBy,
-      selfReported: true,
-      note: "",
-      groups,
-    })
     mockApi({
       "GET /api/findings/stats": stats,
       "GET /api/findings?page=1&limit=10": page([finding]),
@@ -207,6 +221,104 @@ describe("Findings page", () => {
     await userEvent.click(await screen.findByRole("option", { name: "By model" }))
     expect(await within(card).findByRole("table", { name: "Calibration for anthropic/claude" })).toBeInTheDocument()
     expect(within(card).getByRole("table", { name: "Calibration for Unrecorded model" })).toBeInTheDocument()
+  })
+
+  it("pages calibration by whole groups, apart from the false-positive list", async () => {
+    mockApi({
+      "GET /api/findings/stats": stats,
+      "GET /api/findings?page=1&limit=10": page([finding]),
+      [`${FP}&page=1&limit=10`]: { findings: [falsePositive], total: 11, page: 1, limit: 10 },
+      [`${FP}&page=2&limit=10`]: { findings: [falsePositive], total: 11, page: 2, limit: 10 },
+      "GET /api/findings/calibration": ungrouped,
+      "GET /api/findings/calibration?groupBy=model": calibration("model", calibrationGroups("model", 25)),
+    })
+    renderWithProviders(<App />, { route: "/findings?tab=false-positives" })
+    const card = await screen.findByRole("region", { name: "Confidence calibration" })
+    await within(card).findByRole("table", { name: "Calibration" })
+    // Put the false-positive list on its page 2 first (the breakdown tables page too).
+    const listPager = (await screen.findByText("Showing 1-10 of 11")).parentElement!
+    await userEvent.click(within(listPager).getByRole("button", { name: "Next page" }))
+    await screen.findByText("Page 2 of 2")
+    // No grouping is a single table: no pager.
+    expect(within(card).queryByRole("button", { name: "Next page" })).toBeNull()
+    expect(within(card).queryByText(/Showing/)).toBeNull()
+
+    await groupCalibration(card, "By model")
+    expect(await within(card).findByText("Showing 1-10 of 25")).toBeInTheDocument()
+    expect(within(card).getAllByRole("table")).toHaveLength(10)
+
+    await userEvent.click(within(card).getByRole("button", { name: "Next page" }))
+    expect(await within(card).findByText("Showing 11-20 of 25")).toBeInTheDocument()
+    const tables = within(card).getAllByRole("table")
+    expect(tables).toHaveLength(10)
+    expect(tables[0]).toHaveAccessibleName("Calibration for model-11")
+    // Whole groups: every table on the page keeps its header and both buckets.
+    for (const table of tables) expect(within(table).getAllByRole("row")).toHaveLength(3)
+    // The false-positive list above keeps its own page.
+    expect(within(card).getByText("Page 2 of 3")).toBeInTheDocument()
+    expect(screen.getByText("Page 2 of 2")).toBeInTheDocument()
+  })
+
+  it("starts calibration over at page 1 when the grouping or repository changes", async () => {
+    const repo = (id: string, fullPath: string) => ({ id, fullPath, provider: "gitlab", host: "gitlab.com", enabled: true })
+    mockApi({
+      "GET /api/repos": { repos: [repo("r1", "team/web"), repo("r2", "team/api")] },
+      "GET /api/findings/stats": stats,
+      "GET /api/findings?page=1&limit=10": page([finding]),
+      [`${FP}&page=1&limit=10`]: page([falsePositive]),
+      [`GET /api/findings?repoId=r2&state=ignored&ignoreReason=false_positive&page=1&limit=10`]: page([]),
+      "GET /api/findings/calibration": ungrouped,
+      "GET /api/findings/calibration?groupBy=model": calibration("model", calibrationGroups("model", 25)),
+      "GET /api/findings/calibration?groupBy=category": calibration("category", calibrationGroups("cat", 25)),
+      "GET /api/findings/calibration?repoId=r2&groupBy=category": calibration("category", calibrationGroups("cat", 15)),
+    })
+    renderWithProviders(<App />, { route: "/findings?tab=false-positives" })
+    const card = await screen.findByRole("region", { name: "Confidence calibration" })
+    await within(card).findByRole("table", { name: "Calibration" })
+
+    await groupCalibration(card, "By model")
+    await userEvent.click(await within(card).findByRole("button", { name: "Next page" }))
+    await within(card).findByText("Showing 11-20 of 25")
+
+    await groupCalibration(card, "By category")
+    expect(await within(card).findByText("Showing 1-10 of 25")).toBeInTheDocument()
+    expect(within(card).getByRole("table", { name: "Calibration for cat-1" })).toBeInTheDocument()
+
+    await userEvent.click(within(card).getByRole("button", { name: "Next page" }))
+    await within(card).findByText("Showing 11-20 of 25")
+
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }))
+    await userEvent.click(await screen.findByRole("combobox", { name: "Repository" }))
+    await userEvent.click(screen.getByRole("option", { name: "team/api" }))
+    expect(await within(card).findByText("Showing 1-10 of 15")).toBeInTheDocument()
+  })
+
+  it("shows no calibration pager with the error, even over data it already had", async () => {
+    let modelCalls = 0
+    mockApi({
+      "GET /api/findings/stats": stats,
+      "GET /api/findings?page=1&limit=10": page([finding]),
+      [`${FP}&page=1&limit=10`]: page([]),
+      "GET /api/findings/calibration": ungrouped,
+      // The first load succeeds; coming back to the grouping refetches it, and that fails.
+      "GET /api/findings/calibration?groupBy=model": () =>
+        ++modelCalls === 1
+          ? jsonResponse(200, calibration("model", calibrationGroups("model", 25)))
+          : jsonResponse(500, { message: "Internal error" }),
+    })
+    renderWithProviders(<App />, { route: "/findings?tab=false-positives" })
+    const card = await screen.findByRole("region", { name: "Confidence calibration" })
+    await within(card).findByRole("table", { name: "Calibration" })
+
+    await groupCalibration(card, "By model")
+    await within(card).findByText("Showing 1-10 of 25")
+    await groupCalibration(card, "All findings")
+    await within(card).findByRole("table", { name: "Calibration" })
+    await groupCalibration(card, "By model")
+
+    expect(await within(card).findByText("Could not load confidence calibration.")).toBeInTheDocument()
+    expect(within(card).queryByRole("button", { name: "Next page" })).toBeNull()
+    expect(within(card).queryByText(/Showing/)).toBeNull()
   })
 
   it("scopes the breakdown and its hints to the selected repository", async () => {
@@ -255,6 +367,94 @@ describe("Findings page", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Findings" }))
     expect(await screen.findByRole("button", { name: "SQL built from input" })).toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /Remove Repository filter/i })).toBeNull()
+  })
+
+  // A breakdown table and the pagination controls under it (siblings of the table's container).
+  const breakdownGroup = (label: string) =>
+    screen.getByRole("table", { name: `False positives by ${label}` }).closest('[data-slot="table-container"]')!
+      .parentElement!
+  const modelRows = (count: number, prefix = "model") =>
+    Array.from({ length: count }, (_, i) => ({ key: `${prefix}-${i + 1}`, found: 10, falsePositives: 1, rate: 10 }))
+
+  it("pages the model and rule tables independently, counting every thin row as hidden", async () => {
+    mockApi({
+      "GET /api/findings/stats": {
+        ...stats,
+        falsePositivesBy: {
+          ...stats.falsePositivesBy,
+          // 12 shown models plus one under MIN_FOUND, on no page but in the note.
+          model: [...modelRows(12), { key: "thin-model", found: 2, falsePositives: 1, rate: 50 }],
+          rule: modelRows(12, "rule"),
+        },
+      },
+      [`${FP}&page=1&limit=10`]: page([falsePositive]),
+    })
+    renderWithProviders(<App />, { route: "/findings?tab=false-positives&fpModelPage=2" })
+    await screen.findByRole("table", { name: "False positives by model" })
+
+    const models = breakdownGroup("model")
+    expect(within(models).getByText("Showing 11-12 of 12")).toBeInTheDocument()
+    expect(within(models).getByText("model-11")).toBeInTheDocument()
+    expect(within(models).queryByText("model-1")).toBeNull()
+    expect(within(models).getByText("1 row with fewer than 5 findings hidden")).toBeInTheDocument()
+
+    // The rule table keeps its own page.
+    const rules = breakdownGroup("rule")
+    expect(within(rules).getByText("Showing 1-10 of 12")).toBeInTheDocument()
+    await userEvent.click(within(rules).getByRole("button", { name: "Next page" }))
+    expect(await within(rules).findByText("Showing 11-12 of 12")).toBeInTheDocument()
+    expect(within(models).getByText("Showing 11-12 of 12")).toBeInTheDocument()
+    // And so does the false-positive list above them.
+    expect(screen.getByText("Showing 1-1 of 1")).toBeInTheDocument()
+
+    // Category and severity always fit one page, so they get no controls.
+    expect(within(breakdownGroup("category")).queryByRole("button", { name: "Next page" })).toBeNull()
+    expect(within(breakdownGroup("severity")).queryByRole("button", { name: "Next page" })).toBeNull()
+  })
+
+  it("shows no page controls under a table without enough findings", async () => {
+    mockApi({
+      "GET /api/findings/stats": {
+        ...stats,
+        falsePositivesBy: { ...stats.falsePositivesBy, model: [{ key: "thin-model", found: 2, falsePositives: 1, rate: 50 }] },
+      },
+      [`${FP}&page=1&limit=10`]: page([]),
+    })
+    renderWithProviders(<App />, { route: "/findings?tab=false-positives" })
+    await screen.findByRole("table", { name: "False positives by model" })
+
+    const models = breakdownGroup("model")
+    expect(within(models).getByText("Not enough findings yet")).toBeInTheDocument()
+    expect(within(models).queryByRole("button", { name: "Next page" })).toBeNull()
+  })
+
+  it("starts the breakdown tables over at page 1 when the repository changes", async () => {
+    const repo = (id: string, fullPath: string) => ({ id, fullPath, provider: "gitlab", host: "gitlab.com", enabled: true })
+    const withModels = (prefix: string): FindingStats => ({
+      ...stats,
+      falsePositivesBy: { ...stats.falsePositivesBy, model: modelRows(12, prefix), rule: modelRows(12, `${prefix}-rule`) },
+    })
+    mockApi({
+      "GET /api/repos": { repos: [repo("r1", "team/web"), repo("r2", "team/api")] },
+      "GET /api/findings/stats": withModels("all"),
+      "GET /api/findings/stats?repoId=r2": withModels("api"),
+      [`${FP}&page=1&limit=10`]: page([falsePositive]),
+      [`GET /api/findings?repoId=r2&state=ignored&ignoreReason=false_positive&page=1&limit=10`]: page([]),
+    })
+    renderWithProviders(<App />, { route: "/findings?tab=false-positives&fpModelPage=2&fpRulePage=2" })
+    await screen.findByRole("table", { name: "False positives by model" })
+    expect(within(breakdownGroup("model")).getByText("Showing 11-12 of 12")).toBeInTheDocument()
+    expect(within(breakdownGroup("rule")).getByText("Showing 11-12 of 12")).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }))
+    await userEvent.click(await screen.findByRole("combobox", { name: "Repository" }))
+    await userEvent.click(screen.getByRole("option", { name: "team/api" }))
+
+    const region = await screen.findByRole("region", { name: "False positive breakdown" })
+    await within(region).findByText(/in team\/api/)
+    expect(within(breakdownGroup("model")).getByText("Showing 1-10 of 12")).toBeInTheDocument()
+    expect(within(breakdownGroup("model")).getByText("api-1")).toBeInTheDocument()
+    expect(within(breakdownGroup("rule")).getByText("Showing 1-10 of 12")).toBeInTheDocument()
   })
 
   it("keeps the breakdown and the findings list on separate tabs", async () => {

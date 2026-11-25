@@ -10,6 +10,11 @@ While Sentryward is pre-1.0, minor versions may include breaking changes.
 
 ### Added
 
+- Global Expand all / Collapse all controls on the review Overview. Walkthrough
+  sections and findings start collapsed, and the last global choice is remembered
+  across reviews and reloads. Individual toggles and the findings toolbar remain
+  local to the current view (#302).
+
 - Custom reviewers (`reviewers`). A team defines extra reviewers with a name,
   instructions, optional file globs (`paths`), severity floor and finding limit
   (`max_findings`), in the global, repository or folder settings (new editor on
@@ -595,6 +600,13 @@ While Sentryward is pre-1.0, minor versions may include breaking changes.
   here · Findings land inline · status" line are gone. The badge is the new
   `client/public/sentryward-reviewing.svg`; `sentryward-progress.svg` stays
   for comments already posted.
+- The Model and Rule tables in the false-positive breakdown on the Findings
+  page are paginated (#303), each with its own page and page size in the URL
+  (`?fpModelPage=`, `?fpRulePage=`), apart from the false-positive list's.
+  Pages hold only the rows with enough findings to show; the "rows with fewer
+  than 5 findings hidden" note still counts the whole set. Picking or clearing
+  a repository starts both tables over at page 1. Category and Severity stay
+  unpaginated, since they always fit the smallest page.
 - The Models, Best model and Repositories tables on the Benchmarks page are
   paginated (#276), each with its own page and page size in the URL
   (`?modelsPage=`, `?bestPage=`, `?reposPage=`). Best model pages by model
@@ -605,6 +617,13 @@ While Sentryward is pre-1.0, minor versions may include breaking changes.
   until the new ones load, and switching between languages and categories
   does the same for Best model. The controls only show under a table with
   more than ten rows.
+- The Confidence calibration card on the Findings page's False positives tab
+  paginates its groups when grouped by model or category (#304), with its own
+  page and page size in the URL (`?calibPage=`, `?calibSize=`), apart from the
+  false-positive list's. A page holds whole groups, so a group's heading and
+  table never split across pages. Changing the grouping or picking or clearing
+  a repository starts it over at page 1. No grouping keeps its single table
+  without controls, and the loading, error and empty states show none either.
 - Slack notifications for a review are richer (#254): an emoji per event in
   the headline ("🔴 Review blocked · acme/api #42"), the findings broken down
   by severity in `critical`/`major`/`minor`/`info` order, a failed review's
